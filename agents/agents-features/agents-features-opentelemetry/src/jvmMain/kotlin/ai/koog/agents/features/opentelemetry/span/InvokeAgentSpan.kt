@@ -10,6 +10,7 @@ import io.opentelemetry.api.trace.SpanKind
  */
 internal class InvokeAgentSpan(
     override val id: String,
+    override val name: String,
     override val parentSpan: CreateAgentSpan,
     val provider: LLMProvider,
     val runId: String,

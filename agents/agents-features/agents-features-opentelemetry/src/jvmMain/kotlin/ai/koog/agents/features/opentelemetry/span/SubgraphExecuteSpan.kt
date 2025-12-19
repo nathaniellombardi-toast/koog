@@ -12,6 +12,7 @@ import io.opentelemetry.api.trace.SpanKind
  */
 internal class SubgraphExecuteSpan(
     override val id: String,
+    override val name: String,
     override val parentSpan: GenAIAgentSpan,
     val runId: String,
     val subgraphId: String,

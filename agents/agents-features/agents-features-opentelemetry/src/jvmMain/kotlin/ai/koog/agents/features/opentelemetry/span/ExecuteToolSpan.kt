@@ -2,16 +2,16 @@ package ai.koog.agents.features.opentelemetry.span
 
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import io.opentelemetry.api.trace.SpanKind
-import kotlinx.serialization.json.JsonObject
 
 /**
  * Tool Call Span
  */
 internal class ExecuteToolSpan(
     override val id: String,
+    override val name: String,
     override val parentSpan: NodeExecuteSpan,
     val toolName: String,
-    val toolArgs: String?,
+    val toolArgs: String,
     val toolDescription: String?,
     val toolCallId: String?,
 ) : GenAIAgentSpan() {
