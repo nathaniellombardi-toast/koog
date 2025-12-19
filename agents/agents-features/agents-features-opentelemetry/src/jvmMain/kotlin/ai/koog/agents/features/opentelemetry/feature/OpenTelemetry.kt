@@ -1,9 +1,5 @@
 package ai.koog.agents.features.opentelemetry.feature
 
-import ai.koog.agents.core.agent.context.element.AgentRunInfoContextElement
-import ai.koog.agents.core.agent.context.element.NodeInfoContextElement
-import ai.koog.agents.core.agent.context.element.getAgentRunInfoElement
-import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.agent.entity.AIAgentStorageKey
 import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.feature.AIAgentGraphFeature
@@ -682,18 +678,6 @@ public class OpenTelemetry {
 
             return spanProcessor.getSpan<InvokeAgentSpan>(invokeAgentSpanId)
         }
-
-        private suspend fun getAgentRunInfoElementCatching(): AgentRunInfoContextElement? =
-            getAgentRunInfoElement() ?: run {
-                logger.error { "Unable to get AgentRunInfoContextElement" }
-                null
-            }
-
-        private suspend fun getNodeInfoElementCatching(): NodeInfoContextElement? =
-            getNodeInfoElement() ?: run {
-                logger.error { "Unable to get NodeInfoContextElement" }
-                null
-            }
 
         //endregion Private Methods
     }
