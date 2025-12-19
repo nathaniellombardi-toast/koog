@@ -48,7 +48,7 @@ class SpanProcessorTest {
         assertEquals(1, spanProcessor.spansCount)
 
         val actualSpan = spanProcessor.getSpan<GenAIAgentSpan>(spanId)
-        assertEquals(spanId, actualSpan?.spanId)
+        assertEquals(spanId, actualSpan?.id)
     }
 
     @Test
@@ -90,7 +90,7 @@ class SpanProcessorTest {
         assertEquals(1, spanProcessor.spansCount)
         val retrievedSpan = spanProcessor.getSpanOrThrow<GenAIAgentSpan>(spanId)
 
-        assertEquals(spanId, retrievedSpan.spanId)
+        assertEquals(spanId, retrievedSpan.id)
         assertEquals(1, spanProcessor.spansCount)
     }
 
@@ -183,7 +183,7 @@ class SpanProcessorTest {
         assertFalse(span3.isEnded)
 
         // End spans that match the filter (only span1)
-        spanProcessor.endUnfinishedSpans { span -> span.spanId == span1Id }
+        spanProcessor.endUnfinishedSpans { span -> span.id == span1Id }
 
         // Verify span1 is ended, span2 was already ended, span3 is still not ended
         assertTrue(span1.isStarted)
@@ -290,7 +290,7 @@ class SpanProcessorTest {
         assertEquals(1, spanProcessor.spansCount)
         val retrievedSpan = spanProcessor.getSpan<GenAIAgentSpan>(spanId)
         assertNotNull(retrievedSpan)
-        assertEquals(spanId, retrievedSpan.spanId)
+        assertEquals(spanId, retrievedSpan.id)
     }
 
     @Test

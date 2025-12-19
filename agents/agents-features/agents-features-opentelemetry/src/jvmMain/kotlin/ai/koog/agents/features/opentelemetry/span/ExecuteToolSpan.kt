@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonObject
  * Tool Call Span
  */
 internal class ExecuteToolSpan(
-    override val spanId: String,
+    override val id: String,
     override val parentSpan: NodeExecuteSpan,
     val toolName: String,
     val toolArgs: String?,

@@ -10,7 +10,7 @@ import io.opentelemetry.api.trace.SpanKind
  * LLM Call Span
  */
 internal class InferenceSpan(
-    override val spanId: String,
+    override val id: String,
     override val parentSpan: NodeExecuteSpan,
     val provider: LLMProvider,
     val runId: String,

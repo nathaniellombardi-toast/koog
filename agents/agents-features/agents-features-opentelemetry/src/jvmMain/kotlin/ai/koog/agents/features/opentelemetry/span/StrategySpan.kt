@@ -5,7 +5,7 @@ import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes
 import io.opentelemetry.api.trace.SpanKind
 
 internal class StrategySpan(
-    override val spanId: String,
+    override val id: String,
     override val parentSpan: GenAIAgentSpan,
     val runId: String,
     val strategyName: String,

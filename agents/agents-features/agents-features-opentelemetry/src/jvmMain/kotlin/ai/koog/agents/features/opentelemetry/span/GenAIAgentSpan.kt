@@ -28,7 +28,7 @@ internal abstract class GenAIAgentSpan {
      * effectively within the tracing framework.
      */
     var context: Context
-        get() = _context ?: error("Context for span '$spanId' is not initialized")
+        get() = _context ?: error("Context for span '$id' is not initialized")
         set(value) {
             _context = value
         }
@@ -38,18 +38,22 @@ internal abstract class GenAIAgentSpan {
      * The span is initialized and managed as part of the tracing process.
      */
     var span: Span
-        get() = _span ?: error("Span '$spanId' is not started")
+        get() = _span ?: error("Span '$id' is not started")
         set(value) {
             _span = value
         }
+
+    /**
+     * The unique identifier for the span, providing a means to track and distinguish spans.
+     */
+    abstract val id: String
 
     /**
      * The name of the current span derived by removing the parent span ID prefix (if present)
      * from the current span ID and trimming leading dots. Represents a more human-readable
      * and simplified identifier for the current trace span.
      */
-    val name: String
-        get() = spanId.removePrefix(parentSpan?.spanId ?: "").trimStart('.')
+    abstract val name: String
 
     /**
      * Represents the kind of span that is being created or used.
@@ -58,11 +62,6 @@ internal abstract class GenAIAgentSpan {
      * following predefined categories in OpenTelemetry's `SpanKind` enumeration.
      */
     open val kind: SpanKind = SpanKind.CLIENT
-
-    /**
-     * The unique identifier for the span, providing a means to track and distinguish spans.
-     */
-    abstract val spanId: String
 
     /**
      * The parent span of the current span.
@@ -89,7 +88,7 @@ internal abstract class GenAIAgentSpan {
         get() = _events
 
     fun addAttribute(attribute: Attribute) {
-        logger.debug { "Adding attribute to span (name: $name, id: $spanId): ${attribute.key}" }
+        logger.debug { "Adding attribute to span (name: $name, id: $id): ${attribute.key}" }
 
         val existingAttribute = attributes.find { it.key == attribute.key }
         if (existingAttribute != null) {
@@ -100,27 +99,27 @@ internal abstract class GenAIAgentSpan {
     }
 
     fun addAttributes(attributes: List<Attribute>) {
-        logger.debug { "Adding ${attributes.size} attributes to span (name: $name, id: $spanId):\n${attributes.joinToString("\n") { "- ${it.key}" }}" }
+        logger.debug { "Adding ${attributes.size} attributes to span (name: $name, id: $id):\n${attributes.joinToString("\n") { "- ${it.key}" }}" }
         attributes.forEach { addAttribute(it) }
     }
 
     fun removeAttribute(attribute: Attribute): Boolean {
-        logger.debug { "Removing attribute from span (name: $name, id: $spanId): ${attribute.key}" }
+        logger.debug { "Removing attribute from span (name: $name, id: $id): ${attribute.key}" }
         return _attributes.remove(attribute)
     }
 
     fun addEvent(event: GenAIAgentEvent) {
-        logger.debug { "Adding event to span (name: $name, id: $spanId): ${event.name}" }
+        logger.debug { "Adding event to span (name: $name, id: $id): ${event.name}" }
         _events.add(event)
     }
 
     fun addEvents(events: List<GenAIAgentEvent>) {
-        logger.debug { "Adding ${events.size} events to span (name: $name, id: $spanId):\n${events.joinToString("\n") { "- ${it.name}" }}" }
+        logger.debug { "Adding ${events.size} events to span (name: $name, id: $id):\n${events.joinToString("\n") { "- ${it.name}" }}" }
         _events.addAll(events)
     }
 
     fun removeEvent(event: GenAIAgentEvent): Boolean {
-        logger.debug { "Removing event from span (name: $name, id: $spanId): ${event.name}" }
+        logger.debug { "Removing event from span (name: $name, id: $id): ${event.name}" }
         return _events.remove(event)
     }
 }

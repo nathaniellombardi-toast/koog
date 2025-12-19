@@ -41,10 +41,10 @@ internal class SpanProcessor(
         span: GenAIAgentSpan,
         instant: Instant? = null,
     ) {
-        logger.debug { "Starting span (name: ${span.name}, id: ${span.spanId})" }
+        logger.debug { "Starting span (name: ${span.name}, id: ${span.id})" }
 
-        if (_spans.containsKey(span.spanId)) {
-            logger.warn { "Span with id '${span.spanId}' already started" }
+        if (_spans.containsKey(span.id)) {
+            logger.warn { "Span with id '${span.id}' already started" }
             return
         }
 
@@ -67,14 +67,14 @@ internal class SpanProcessor(
         span.span = startedSpan
         span.context = startedSpan.storeInContext(parentContext)
 
-        logger.debug { "Span has been started (name: ${span.name}, id: ${span.spanId})" }
+        logger.debug { "Span has been started (name: ${span.name}, id: ${span.id})" }
     }
 
     fun endSpan(
         span: GenAIAgentSpan,
         spanEndStatus: SpanEndStatus? = null
     ) {
-        logger.debug { "Finishing the span (id: ${span.spanId})" }
+        logger.debug { "Finishing the span (id: ${span.id})" }
 
         val spanToFinish = span.span
 
@@ -83,10 +83,10 @@ internal class SpanProcessor(
         spanToFinish.setSpanStatus(spanEndStatus)
         spanToFinish.end()
 
-        val removedSpan = _spans.remove(span.spanId)
+        val removedSpan = _spans.remove(span.id)
         if (removedSpan == null) {
             logger.warn {
-                "Span with id '${span.spanId}' not found. Make sure you do not delete span with same id several times"
+                "Span with id '${span.id}' not found. Make sure you do not delete span with same id several times"
             }
         }
     }
@@ -121,7 +121,7 @@ internal class SpanProcessor(
                 isRequireFinish
             }
             .forEach { span ->
-                logger.warn { "Force close span with id: ${span.spanId}" }
+                logger.warn { "Force close span with id: ${span.id}" }
                 endSpan(
                     span = span,
                     spanEndStatus = SpanEndStatus(StatusCode.UNSET)
@@ -133,12 +133,12 @@ internal class SpanProcessor(
 
     private fun addSpan(span: GenAIAgentSpan) {
         spansLock.write {
-            val spanId = span.spanId
+            val spanId = span.id
             val existingSpan = _spans[spanId]
 
             check(existingSpan == null) { "Span with id '$spanId' already added" }
 
-            _spans[span.spanId] = span
+            _spans[span.id] = span
         }
     }
 

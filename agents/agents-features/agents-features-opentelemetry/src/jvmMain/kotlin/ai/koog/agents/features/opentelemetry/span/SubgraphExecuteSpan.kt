@@ -11,7 +11,7 @@ import io.opentelemetry.api.trace.SpanKind
  * Note: This span is out of scope of Open Telemetry Semantic Convention for GenAI.
  */
 internal class SubgraphExecuteSpan(
-    override val spanId: String,
+    override val id: String,
     override val parentSpan: GenAIAgentSpan,
     val runId: String,
     val subgraphId: String,

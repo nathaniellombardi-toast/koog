@@ -70,7 +70,7 @@ public class OpenTelemetry {
                 val createAgentSpanId = eventContext.executionInfo.parent?.id ?: eventContext.context.agentId
                 val createAgentSpan = spanProcessor.getSpan(createAgentSpanId) ?: run {
                     val span = CreateAgentSpan(
-                        spanId = createAgentSpanId,
+                        id = createAgentSpanId,
                         model = eventContext.agent.agentConfig.model,
                         agentId = eventContext.context.agentId
                     )
@@ -82,7 +82,7 @@ public class OpenTelemetry {
 
                 // Create InvokeAgentSpan
                 val invokeAgentSpan = InvokeAgentSpan(
-                    spanId = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.id,
                     parentSpan = createAgentSpan,
                     provider = eventContext.agent.agentConfig.model.provider,
                     agentId = eventContext.agent.id,
@@ -128,7 +128,7 @@ public class OpenTelemetry {
                 logger.debug { "Execute OpenTelemetry before agent closed handler" }
 
                 // Stop all unfinished spans except the current agent create span
-                spanProcessor.endUnfinishedSpans { span -> span.spanId != eventContext.agentId }
+                spanProcessor.endUnfinishedSpans { span -> span.id != eventContext.agentId }
 
                 // Stop agent create span
                 val agentSpan = spanProcessor.getSpanCatching<CreateAgentSpan>(eventContext.agentId)
@@ -157,7 +157,7 @@ public class OpenTelemetry {
 
                 // Create a Strategy Span
                 val strategySpan = StrategySpan(
-                    spanId = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.id,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     strategyName = eventContext.strategy.name,
@@ -191,7 +191,7 @@ public class OpenTelemetry {
 
                 // Create Node Execute Span
                 val nodeExecuteSpan = NodeExecuteSpan(
-                    spanId = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.id,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     nodeId = eventContext.node.id,
@@ -249,7 +249,7 @@ public class OpenTelemetry {
 
                 // Create SubgraphExecuteSpan
                 val subgraphExecuteSpan = SubgraphExecuteSpan(
-                    spanId = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.id,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     subgraphInput = nodeDataToString(eventContext.input, eventContext.inputType),
@@ -314,7 +314,7 @@ public class OpenTelemetry {
                 val temperature = eventContext.prompt.params.temperature ?: 0.0
 
                 val inferenceSpan = InferenceSpan(
-                    spanId = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.id,
                     parentSpan = parentSpan,
                     provider = provider,
                     runId = eventContext.runId,
@@ -445,7 +445,7 @@ public class OpenTelemetry {
                     ?: return@intercept
 
                 val executeToolSpan = ExecuteToolSpan(
-                    spanId = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.id,
                     parentSpan = parentSpan,
                     toolName = eventContext.toolName,
                     toolArgs = eventContext.toolArgs.toString(),
@@ -594,8 +594,8 @@ public class OpenTelemetry {
         }
 
         private fun AgentLifecycleEventContext.getParentEventIdLogging(): String? =
-            this.executionInfo.parent?.partName ?: run {
-                logger.error { "Undefined agent event parent for event with id: ${this.executionInfo.partName}" }
+            this.executionInfo.parent?.path() ?: run {
+                logger.error { "Undefined agent event parent for event with id: ${this.executionInfo.path()}" }
                 null
             }
 

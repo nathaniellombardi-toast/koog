@@ -40,7 +40,7 @@ class LangfuseSpanAdapterTest {
         val model = createTestModel(provider)
 
         val createAgentSpanId = "create-agent-span-id"
-        val createAgentSpan = CreateAgentSpan(spanId = createAgentSpanId, model, agentId = "agent-id")
+        val createAgentSpan = CreateAgentSpan(id = createAgentSpanId, model, agentId = "agent-id")
 
         val invokeAgentSpanId = "invoke-agent-span-id"
         val invokeSpan = InvokeAgentSpan(invokeAgentSpanId, createAgentSpan, provider, runId = "run-id", agentId = "agent-id")
@@ -194,7 +194,7 @@ private fun createInferenceSpan(
     val model = createTestModel(provider)
 
     val createAgentSpanId = "create-agent-span-id"
-    val createAgentSpan = CreateAgentSpan(spanId = createAgentSpanId, model, agentId)
+    val createAgentSpan = CreateAgentSpan(id = createAgentSpanId, model, agentId)
 
     val invokeSpanId = "invoke-agent-span-id"
     val invokeSpan = InvokeAgentSpan(invokeSpanId, createAgentSpan, provider, runId, agentId)
@@ -203,7 +203,7 @@ private fun createInferenceSpan(
     val nodeSpan = NodeExecuteSpan(nodeSpanId, invokeSpan, runId, nodeId, nodeInput)
 
     val inferenceSpanId = "inference-span-id"
-    val inferenceSpan = InferenceSpan(spanId = inferenceSpanId, nodeSpan, provider, runId, model, promptId, temperature)
+    val inferenceSpan = InferenceSpan(id = inferenceSpanId, nodeSpan, provider, runId, model, promptId, temperature)
 
     return inferenceSpan
 }
