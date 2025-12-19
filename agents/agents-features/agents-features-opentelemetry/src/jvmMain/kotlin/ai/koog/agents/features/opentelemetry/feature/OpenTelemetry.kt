@@ -3,6 +3,7 @@ package ai.koog.agents.features.opentelemetry.feature
 import ai.koog.agents.core.agent.entity.AIAgentStorageKey
 import ai.koog.agents.core.agent.execution.AgentExecutionInfo
 import ai.koog.agents.core.annotation.InternalAgentsApi
+import ai.koog.agents.core.dsl.builder.strategy
 import ai.koog.agents.core.feature.AIAgentGraphFeature
 import ai.koog.agents.core.feature.handler.AgentLifecycleEventContext
 import ai.koog.agents.core.feature.pipeline.AIAgentGraphPipeline
@@ -160,8 +161,8 @@ public class OpenTelemetry {
 
                 // Create a Strategy Span
                 val strategySpan = StrategySpan(
-                    id = eventContext.executionInfo.path(),
-                    name = eventContext.executionInfo.partName,
+                    id = eventContext.eventId,
+                    name = eventContext.strategy.name,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     strategyName = eventContext.strategy.name,
@@ -612,11 +613,8 @@ public class OpenTelemetry {
         /**
          * Gets the parent event ID from the execution info, logging an error if not found.
          */
-        private fun AgentLifecycleEventContext.getParentEventIdLogging(): String? =
-            this.executionInfo.parent?.path() ?: run {
-                logger.error { "Undefined agent event parent for event with id: ${this.executionInfo.path()}" }
-                null
-            }
+        private fun SpanCollector.getParentEventIdLogging(): String? {
+        }
 
         //endregion Private Methods
     }
