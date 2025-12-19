@@ -18,18 +18,40 @@ internal class SpanCollector(
     private val verbose: Boolean = false
 ) {
 
-    companion object {
-        private val logger = KotlinLogging.logger { }
-    }
-
     internal data class SpanNode(
         val span: GenAIAgentSpan,
         val children: MutableList<SpanNode> = mutableListOf()
     )
 
+    companion object {
+        private val logger = KotlinLogging.logger { }
+    }
+
+    /**
+     * A list that holds the root-level span nodes in the tracing hierarchy.
+     * Each span node represents a span and its associated child spans,
+     * maintaining the hierarchical structure of traced operations.
+     *
+     * This collection is designed to store only the topmost spans in the trace,
+     * where each root span may have nested child spans representing a tree
+     * of related tracing information within the system.
+     */
     private val rootSpans = mutableListOf<SpanNode>()
+
+    /**
+     * A mutable map for tracking the hierarchical structure of spans within the system.
+     *
+     * Keys are span IDs, and values are [SpanNode] objects, which represent
+     * individual spans and their associated child spans in a tree-like format.
+     *
+     * This map is used internally to manage and maintain relationships between spans,
+     * enabling the system to properly construct and end spans during the tracing process.
+     */
     private val spanIndex = mutableMapOf<String, SpanNode>()
 
+    /**
+     * A read-write lock to ensure thread-safe access to the span index.
+     */
     private val spansLock = ReentrantReadWriteLock()
 
     val spansCount: Int
