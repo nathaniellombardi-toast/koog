@@ -28,17 +28,6 @@ internal class SpanCollector(
     }
 
     /**
-     * A list that holds the root-level span nodes in the tracing hierarchy.
-     * Each span node represents a span and its associated child spans,
-     * maintaining the hierarchical structure of traced operations.
-     *
-     * This collection is designed to store only the topmost spans in the trace,
-     * where each root span may have nested child spans representing a tree
-     * of related tracing information within the system.
-     */
-    private val rootSpans = mutableListOf<SpanNode>()
-
-    /**
      * A mutable map for tracking the hierarchical structure of spans within the system.
      *
      * Keys are span IDs, and values are [SpanNode] objects, which represent
@@ -55,7 +44,7 @@ internal class SpanCollector(
     private val spansLock = ReentrantReadWriteLock()
 
     val spansCount: Int
-        get() = spanIndex.count()
+        get() = spansLock.read { spanIndex.size }
 
     fun addEventsToSpan(spanId: String, events: List<GenAIAgentEvent>) {
         spansLock.read {
@@ -70,11 +59,6 @@ internal class SpanCollector(
     ) {
         logger.debug { "Starting span (name: ${span.name}, id: ${span.id})" }
 
-        if (spanIndex.containsKey(span.id)) {
-            logger.warn { "Span with id '${span.id}' already started" }
-            return
-        }
-
         val spanKind = span.kind
         val parentContext = span.parentSpan?.context ?: Context.current()
 
@@ -87,8 +71,13 @@ internal class SpanCollector(
 
         val startedSpan = spanBuilder.startSpan()
 
-        // Store newly started span
-        addSpan(span)
+        // Store newly started span (with thread-safe check inside)
+        val wasAdded = addSpan(span)
+        if (!wasAdded) {
+            logger.warn { "Span with id '${span.id}' already started" }
+            startedSpan.end()
+            return
+        }
 
         // Update span context and span properties
         span.span = startedSpan
@@ -119,23 +108,21 @@ internal class SpanCollector(
                 return@write
             }
 
-            // Remove from parent's children or from rootSpans
+            // Remove from parent's children
             val parentSpan = span.parentSpan
             if (parentSpan != null) {
                 val parentNode = spanIndex[parentSpan.id]
                 parentNode?.children?.remove(removedNode)
-            } else {
-                rootSpans.remove(removedNode)
             }
         }
     }
 
     inline fun <reified T : GenAIAgentSpan> getSpan(spanId: String): T? {
-        return spanIndex[spanId]?.span as? T
+        return spansLock.read { spanIndex[spanId]?.span as? T }
     }
 
     inline fun <reified T : GenAIAgentSpan> getSpanOrThrow(spanId: String): T {
-        val span = spanIndex[spanId]?.span ?: error("Span with id: $spanId not found")
+        val span = spansLock.read { spanIndex[spanId]?.span } ?: error("Span with id: $spanId not found")
         return span as? T
             ?: error(
                 "Span with id <$spanId> is not of expected type. Expected: <${T::class.simpleName}>, actual: <${span::class.simpleName}>"
@@ -154,43 +141,51 @@ internal class SpanCollector(
     }
 
     fun endUnfinishedSpans(filter: (GenAIAgentSpan) -> Boolean = { true }) {
-        spanIndex.values
-            .map { it.span }
-            .filter { span ->
-                val isRequireFinish = filter(span)
-                isRequireFinish
-            }
-            .forEach { span ->
-                logger.warn { "Force close span with id: ${span.id}" }
-                endSpan(
-                    span = span,
-                    spanEndStatus = SpanEndStatus(StatusCode.UNSET)
-                )
-            }
+        // Take snapshot to avoid ConcurrentModificationException
+        val spansToEnd = spansLock.read {
+            spanIndex.values
+                .map { it.span }
+                .filter(filter)
+                .toList()
+        }
+
+        spansToEnd.forEach { span ->
+            logger.warn { "Force close span with id: ${span.id}" }
+            endSpan(
+                span = span,
+                spanEndStatus = SpanEndStatus(StatusCode.UNSET)
+            )
+        }
     }
 
     //region Private Methods
 
-    private fun addSpan(span: GenAIAgentSpan) {
-        spansLock.write {
-            val spanId = span.id
-            val existingNode = spanIndex[spanId]
-
-            check(existingNode == null) { "Span with id '$spanId' already added" }
-
-            val newNode = SpanNode(span)
-            spanIndex[span.id] = newNode
-
-            // Add to parent's children or to rootSpans
-            val parentSpan = span.parentSpan
-            if (parentSpan != null) {
-                val parentNode = spanIndex[parentSpan.id]
-                    ?: error("Parent span with id '${parentSpan.id}' not found. Parent must be added before child.")
-                parentNode.children.add(newNode)
-            } else {
-                rootSpans.add(newNode)
-            }
+    /**
+     * Adds a span to the index.
+     *
+     * @return true if successfully added, false if it already exists.
+     */
+    private fun addSpan(span: GenAIAgentSpan): Boolean = spansLock.write {
+        // Check if already exists
+        if (spanIndex.containsKey(span.id)) {
+            return@write false
         }
+
+        val newNode = SpanNode(span)
+        spanIndex[span.id] = newNode
+
+        // Add to children
+        val parentSpan = span.parentSpan
+        if (parentSpan != null) {
+            val parentNode = spanIndex[parentSpan.id]
+                ?: error("Parent span with id '${parentSpan.id}' not found. Parent must be added before child.")
+
+            parentNode.children.add(newNode)
+        }
+
+        // Root span (agent) has no parent.
+        // It doesn't need to be added to any parent's children list.
+        true
     }
 
     //endregion Private Methods

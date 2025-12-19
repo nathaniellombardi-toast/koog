@@ -5,6 +5,7 @@ import io.opentelemetry.api.trace.StatusCode
 
 internal class MockGenAIAgentSpan(
     override val id: String,
+    override val name: String,
     override val parentSpan: GenAIAgentSpan? = null
 ) : GenAIAgentSpan() {
 

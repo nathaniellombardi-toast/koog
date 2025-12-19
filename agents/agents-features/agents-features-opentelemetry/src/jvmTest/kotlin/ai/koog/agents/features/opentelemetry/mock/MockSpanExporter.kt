@@ -1,5 +1,6 @@
 package ai.koog.agents.features.opentelemetry.mock
 
+import io.opentelemetry.api.common.AttributeKey
 import io.opentelemetry.sdk.common.CompletableResultCode
 import io.opentelemetry.sdk.trace.data.SpanData
 import io.opentelemetry.sdk.trace.export.SpanExporter
@@ -17,26 +18,17 @@ internal class MockSpanExporter : SpanExporter {
     val collectedSpans: List<SpanData>
         get() = _collectedSpans
 
-    private val _runIds = mutableListOf<String>()
-
     val runIds: List<String>
-        get() = _runIds
+        get() = collectedSpans.mapNotNull { span ->
+            span.attributes[AttributeKey.stringKey("gen_ai.conversation.id")]
+        }.distinct()
 
     val lastRunId: String
-        get() = _runIds.last()
+        get() = runIds.last()
 
     override fun export(spans: MutableCollection<SpanData>): CompletableResultCode {
         spans.forEach { span ->
             _collectedSpans.add(0, span)
-        }
-
-        // Workaround to get runId Uuid from the span name
-        val runSpan = spans.find { it.name.startsWith("run.", true) }
-        if (runSpan != null) {
-            val runId = runSpan.name.removePrefix("run.")
-            if (!_runIds.contains(runId)) {
-                _runIds.add(runId)
-            }
         }
 
         return CompletableResultCode.ofSuccess()
