@@ -31,6 +31,7 @@ import ai.koog.agents.core.feature.handler.AgentLifecycleEventType.ToolCallCompl
 import ai.koog.agents.core.feature.handler.AgentLifecycleEventType.ToolCallFailed
 import ai.koog.agents.core.feature.handler.AgentLifecycleEventType.ToolCallStarting
 import ai.koog.agents.core.feature.handler.AgentLifecycleEventType.ToolValidationFailed
+import ai.koog.agents.core.feature.model.events.NodeExecutionStartingEvent
 import ai.koog.agents.core.tools.ToolRegistry
 import ai.koog.agents.testing.agent.agentExecutionPath
 import ai.koog.agents.testing.tools.DummyTool
@@ -772,6 +773,75 @@ class AIAgentPipelineTest {
             expectedEvents.size,
             actualEvents.size,
             "Miss intercepted tool events. Expected ${expectedEvents.size}, but received: ${actualEvents.size}"
+        )
+
+        assertContentEquals(expectedEvents, actualEvents)
+    }
+
+    @Test
+    fun `test AgentExecutionInfo path with loop nodes invocation`() = runTest {
+        val interceptedEvents = mutableListOf<String>()
+        val interceptedRunIds = mutableListOf<String>()
+
+        val agentId = "test-agent-id"
+        val agentInput = "test input"
+
+        val strategyName = "test-strategy"
+        val nodeRootName = "node-root"
+        val nodeRootOutput = "Root node output"
+        val nodeExecuteName = "node-execute"
+        val nodeExecuteOutput = "Execute output"
+
+        var isExecuted = false
+
+        val strategy = strategy(strategyName) {
+            val nodeRoot by node<String, String>(nodeRootName) { it }
+            val nodeExecute by node<String, String>(nodeExecuteName) {
+                isExecuted = true
+                it
+            }
+
+            edge(nodeStart forwardTo nodeRoot)
+            edge(nodeRoot forwardTo nodeExecute onCondition { !isExecuted })
+            edge(nodeRoot forwardTo nodeFinish onCondition { isExecuted } transformed { nodeRootOutput })
+            edge(nodeExecute forwardTo nodeRoot transformed { nodeExecuteOutput })
+        }
+
+        createAgent(
+            strategy = strategy,
+            promptExecutor = getMockExecutor { }
+        ) {
+            install(TestFeature) {
+                events = interceptedEvents
+                runIds = interceptedRunIds
+            }
+        }.use { agent ->
+            agent.run(agentInput)
+        }
+
+        val actualEvents = interceptedEvents.filter { collectedEvent ->
+            collectedEvent.startsWith(NodeExecutionStarting::class.simpleName.toString()) ||
+                collectedEvent.startsWith(NodeExecutionCompleted::class.simpleName.toString()) ||
+                collectedEvent.startsWith(NodeExecutionFailed::class.simpleName.toString())
+        }
+
+        val expectedEvents = listOf(
+            "${NodeExecutionStarting::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, START_NODE_PREFIX)}, name: $START_NODE_PREFIX, input: $agentInput)",
+            "${NodeExecutionCompleted::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, START_NODE_PREFIX)}, name: $START_NODE_PREFIX, input: $agentInput, output: $agentInput)",
+            "${NodeExecutionStarting::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, nodeRootName)}, name: $nodeRootName, input: $agentInput)",
+            "${NodeExecutionCompleted::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, nodeRootName)}, name: $nodeRootName, input: $agentInput, output: $agentInput)",
+            "${NodeExecutionStarting::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, nodeExecuteName)}, name: $nodeExecuteName, input: $agentInput)",
+            "${NodeExecutionCompleted::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, nodeExecuteName)}, name: $nodeExecuteName, input: $agentInput, output: $agentInput)",
+            "${NodeExecutionStarting::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, nodeRootName)}, name: $nodeRootName, input: $nodeExecuteOutput)",
+            "${NodeExecutionCompleted::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, nodeRootName)}, name: $nodeRootName, input: $nodeExecuteOutput, output: $nodeExecuteOutput)",
+            "${NodeExecutionStarting::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, FINISH_NODE_PREFIX)}, name: $FINISH_NODE_PREFIX, input: $nodeRootOutput)",
+            "${NodeExecutionCompleted::class.simpleName} (path: ${agentExecutionPath(agentId, strategyName, FINISH_NODE_PREFIX)}, name: $FINISH_NODE_PREFIX, input: $nodeRootOutput, output: $nodeRootOutput)",
+        )
+
+        assertEquals(
+            expectedEvents.size,
+            actualEvents.size,
+            "Miss intercepted node events. Expected ${expectedEvents.size}, but received: ${actualEvents.size}"
         )
 
         assertContentEquals(expectedEvents, actualEvents)

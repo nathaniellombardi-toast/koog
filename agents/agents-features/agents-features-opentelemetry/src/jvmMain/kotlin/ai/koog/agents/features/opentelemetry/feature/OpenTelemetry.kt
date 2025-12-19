@@ -16,7 +16,6 @@ import ai.koog.agents.features.opentelemetry.event.ModerationResponseEvent
 import ai.koog.agents.features.opentelemetry.event.SystemMessageEvent
 import ai.koog.agents.features.opentelemetry.event.ToolMessageEvent
 import ai.koog.agents.features.opentelemetry.event.UserMessageEvent
-import ai.koog.agents.features.opentelemetry.hierarchy.AgentExecutionCollector
 import ai.koog.agents.features.opentelemetry.span.CreateAgentSpan
 import ai.koog.agents.features.opentelemetry.span.ExecuteToolSpan
 import ai.koog.agents.features.opentelemetry.span.GenAIAgentSpan
@@ -24,7 +23,7 @@ import ai.koog.agents.features.opentelemetry.span.InferenceSpan
 import ai.koog.agents.features.opentelemetry.span.InvokeAgentSpan
 import ai.koog.agents.features.opentelemetry.span.NodeExecuteSpan
 import ai.koog.agents.features.opentelemetry.span.SpanEndStatus
-import ai.koog.agents.features.opentelemetry.span.SpanProcessor
+import ai.koog.agents.features.opentelemetry.span.SpanCollector
 import ai.koog.agents.features.opentelemetry.span.StrategySpan
 import ai.koog.agents.features.opentelemetry.span.SubgraphExecuteSpan
 import ai.koog.agents.utils.HiddenString
@@ -59,7 +58,7 @@ public class OpenTelemetry {
         ): OpenTelemetry {
             val openTelemetry = OpenTelemetry()
             val tracer = config.tracer
-            val spanProcessor = SpanProcessor(tracer = tracer, verbose = config.isVerbose)
+            val spanCollector = SpanCollector(tracer = tracer, verbose = config.isVerbose)
             val spanAdapter = config.spanAdapter
 
             //region Agent
@@ -69,7 +68,7 @@ public class OpenTelemetry {
 
                 // Check if Create Agent Span is already added (when running the same agent >= 1 times)
                 val createAgentSpanId = eventContext.eventId
-                val createAgentSpan = spanProcessor.getSpan(createAgentSpanId) ?: run {
+                val createAgentSpan = spanCollector.getSpan(createAgentSpanId) ?: run {
                     val span = CreateAgentSpan(
                         parentSpan = null,
                         id = createAgentSpanId,
@@ -79,7 +78,7 @@ public class OpenTelemetry {
                     )
 
                     spanAdapter?.onBeforeSpanStarted(span)
-                    spanProcessor.startSpan(span)
+                    spanCollector.startSpan(span)
                     span
                 }
 
@@ -94,25 +93,25 @@ public class OpenTelemetry {
                 )
 
                 spanAdapter?.onBeforeSpanStarted(invokeAgentSpan)
-                spanProcessor.startSpan(invokeAgentSpan)
+                spanCollector.startSpan(invokeAgentSpan)
             }
 
             pipeline.interceptAgentCompleted(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry agent finished handler" }
 
                 // Find parent span - InvokeAgentSpan
-                val invokeAgentSpan = spanProcessor.getSpanCatching<InvokeAgentSpan>(eventContext.eventId)
+                val invokeAgentSpan = spanCollector.getSpanCatching<InvokeAgentSpan>(eventContext.eventId)
                     ?: return@intercept
 
                 spanAdapter?.onBeforeSpanFinished(invokeAgentSpan)
-                spanProcessor.endSpan(span = invokeAgentSpan)
+                spanCollector.endSpan(span = invokeAgentSpan)
             }
 
             pipeline.interceptAgentExecutionFailed(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry agent run error handler" }
 
                 // Finish current InvokeAgentSpan
-                val invokeAgentSpan = spanProcessor.getSpanCatching<InvokeAgentSpan>(eventContext.eventId)
+                val invokeAgentSpan = spanCollector.getSpanCatching<InvokeAgentSpan>(eventContext.eventId)
                     ?: return@intercept
 
                 invokeAgentSpan.addAttribute(
@@ -122,7 +121,7 @@ public class OpenTelemetry {
                 )
 
                 spanAdapter?.onBeforeSpanFinished(invokeAgentSpan)
-                spanProcessor.endSpan(
+                spanCollector.endSpan(
                     span = invokeAgentSpan,
                     spanEndStatus = SpanEndStatus(code = StatusCode.ERROR, description = eventContext.throwable.message)
                 )
@@ -132,17 +131,17 @@ public class OpenTelemetry {
                 logger.debug { "Execute OpenTelemetry before agent closed handler" }
 
                 // Stop all unfinished spans except the current agent create span
-                spanProcessor.endUnfinishedSpans { span -> span.id != eventContext.eventId }
+                spanCollector.endUnfinishedSpans { span -> span.id != eventContext.eventId }
 
                 // Stop agent create span
-                val agentSpan = spanProcessor.getSpanCatching<CreateAgentSpan>(eventContext.eventId)
+                val agentSpan = spanCollector.getSpanCatching<CreateAgentSpan>(eventContext.eventId)
                     ?: return@intercept
 
                 spanAdapter?.onBeforeSpanFinished(agentSpan)
-                spanProcessor.endSpan(span = agentSpan)
+                spanCollector.endSpan(span = agentSpan)
 
                 // Just in case we miss some spans, stop them as well
-                spanProcessor.endUnfinishedSpans()
+                spanCollector.endUnfinishedSpans()
             }
 
             //endregion Agent
@@ -152,34 +151,35 @@ public class OpenTelemetry {
             pipeline.interceptStrategyStarting(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry before subgraph handler" }
 
-                val parentEventId = spanProcessor.getSpanCatching<InvokeAgentSpan>(eventI) eventContext.getParentEventIdLogging()
+                val parentEventId = eventContext.getParentEventIdLogging()
                     ?: return@intercept
 
                 // Get parent span (Invoke Agent Span)
-                val parentSpan = spanProcessor.getSpanCatching<InvokeAgentSpan>(parentEventId)
+                val parentSpan = spanCollector.getSpanCatching<InvokeAgentSpan>(parentEventId)
                     ?: return@intercept
 
                 // Create a Strategy Span
                 val strategySpan = StrategySpan(
-                    id = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.path(),
+                    name = eventContext.executionInfo.partName,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     strategyName = eventContext.strategy.name,
                 )
 
                 spanAdapter?.onBeforeSpanStarted(strategySpan)
-                spanProcessor.startSpan(strategySpan)
+                spanCollector.startSpan(strategySpan)
             }
 
             pipeline.interceptStrategyCompleted(this) intercept@{ eventContext ->
-                val eventId = eventContext.executionInfo.id
+                val eventId = eventContext.executionInfo.path()
 
                 // Find current Strategy Span
-                val strategySpan = spanProcessor.getSpanCatching<StrategySpan>(eventId)
+                val strategySpan = spanCollector.getSpanCatching<StrategySpan>(eventId)
                     ?: return@intercept
 
                 spanAdapter?.onBeforeSpanFinished(strategySpan)
-                spanProcessor.endSpan(span = strategySpan)
+                spanCollector.endSpan(span = strategySpan)
             }
 
             //endregion Strategy
@@ -190,12 +190,13 @@ public class OpenTelemetry {
                 logger.debug { "Execute OpenTelemetry node starting handler" }
 
                 // Get parent span (node, subgraph, or agent strategy)
-                val parentSpan = spanProcessor.findClosestParentSpan(eventContext)
+                val parentSpan = spanCollector.findClosestParentSpan(eventContext)
                     ?: return@intercept
 
                 // Create Node Execute Span
                 val nodeExecuteSpan = NodeExecuteSpan(
-                    id = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.path(),
+                    name = eventContext.executionInfo.partName,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     nodeId = eventContext.node.id,
@@ -203,15 +204,15 @@ public class OpenTelemetry {
                 )
 
                 spanAdapter?.onBeforeSpanStarted(nodeExecuteSpan)
-                spanProcessor.startSpan(nodeExecuteSpan)
+                spanCollector.startSpan(nodeExecuteSpan)
             }
 
             pipeline.interceptNodeExecutionCompleted(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry node completed handler" }
 
                 // Find existing span (Node Execute Span)
-                val eventId = eventContext.executionInfo.id
-                val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(eventId)
+                val eventId = eventContext.executionInfo.path()
+                val nodeExecuteSpan = spanCollector.getSpanCatching<NodeExecuteSpan>(eventId)
                     ?: return@intercept
 
                 val attributesToAdd = buildList {
@@ -223,7 +224,7 @@ public class OpenTelemetry {
                 nodeExecuteSpan.addAttributes(attributesToAdd)
 
                 spanAdapter?.onBeforeSpanFinished(nodeExecuteSpan)
-                spanProcessor.endSpan(nodeExecuteSpan)
+                spanCollector.endSpan(nodeExecuteSpan)
             }
 
             pipeline.interceptNodeExecutionFailed(this) intercept@{ eventContext ->
@@ -231,11 +232,11 @@ public class OpenTelemetry {
 
                 // Find existing span (Node Execute Span)
                 val eventId = eventContext.eventId
-                val nodeExecuteSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(eventId)
+                val nodeExecuteSpan = spanCollector.getSpanCatching<NodeExecuteSpan>(eventId)
                     ?: return@intercept
 
                 spanAdapter?.onBeforeSpanFinished(nodeExecuteSpan)
-                spanProcessor.endSpan(
+                spanCollector.endSpan(
                     span = nodeExecuteSpan,
                     spanEndStatus = SpanEndStatus(code = StatusCode.ERROR, description = eventContext.throwable.message)
                 )
@@ -249,11 +250,12 @@ public class OpenTelemetry {
                 logger.debug { "Execute OpenTelemetry before subgraph handler" }
 
                 // Get parent span (node, subgraph, or agent strategy)
-                val parentSpan = spanProcessor.findClosestParentSpan(eventContext) ?: return@intercept
+                val parentSpan = spanCollector.findClosestParentSpan(eventContext) ?: return@intercept
 
                 // Create SubgraphExecuteSpan
                 val subgraphExecuteSpan = SubgraphExecuteSpan(
-                    id = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.path(),
+                    name = eventContext.executionInfo.partName,
                     parentSpan = parentSpan,
                     runId = eventContext.context.runId,
                     subgraphInput = nodeDataToString(eventContext.input, eventContext.inputType),
@@ -261,15 +263,15 @@ public class OpenTelemetry {
                 )
 
                 spanAdapter?.onBeforeSpanStarted(subgraphExecuteSpan)
-                spanProcessor.startSpan(subgraphExecuteSpan)
+                spanCollector.startSpan(subgraphExecuteSpan)
             }
 
             pipeline.interceptSubgraphExecutionCompleted(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry after subgraph handler" }
 
                 // Find the existing span (Subgraph Execute Span)
-                val eventId = eventContext.executionInfo.id
-                val subgraphExecuteSpan = spanProcessor.getSpanCatching<SubgraphExecuteSpan>(eventId)
+                val eventId = eventContext.executionInfo.path()
+                val subgraphExecuteSpan = spanCollector.getSpanCatching<SubgraphExecuteSpan>(eventId)
                     ?: return@intercept
 
                 val attributesToAdd = buildList {
@@ -281,19 +283,19 @@ public class OpenTelemetry {
                 subgraphExecuteSpan.addAttributes(attributesToAdd)
 
                 spanAdapter?.onBeforeSpanFinished(subgraphExecuteSpan)
-                spanProcessor.endSpan(subgraphExecuteSpan)
+                spanCollector.endSpan(subgraphExecuteSpan)
             }
 
             pipeline.interceptSubgraphExecutionFailed(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry subgraph execution error handler" }
 
                 // Find the existing span (Subgraph Execute Span)
-                val eventId = eventContext.executionInfo.id
-                val subgraphExecuteSpan = spanProcessor.getSpanCatching<SubgraphExecuteSpan>(eventId)
+                val eventId = eventContext.executionInfo.path()
+                val subgraphExecuteSpan = spanCollector.getSpanCatching<SubgraphExecuteSpan>(eventId)
                     ?: return@intercept
 
                 spanAdapter?.onBeforeSpanFinished(subgraphExecuteSpan)
-                spanProcessor.endSpan(
+                spanCollector.endSpan(
                     span = subgraphExecuteSpan,
                     spanEndStatus = SpanEndStatus(code = StatusCode.ERROR, description = eventContext.throwable.message)
                 )
@@ -310,7 +312,7 @@ public class OpenTelemetry {
                 val parentId = eventContext.getParentEventIdLogging()
                     ?: return@intercept
 
-                val parentSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(parentId)
+                val parentSpan = spanCollector.getSpanCatching<NodeExecuteSpan>(parentId)
                     ?: return@intercept
 
                 val provider = eventContext.model.provider
@@ -318,7 +320,8 @@ public class OpenTelemetry {
                 val temperature = eventContext.prompt.params.temperature ?: 0.0
 
                 val inferenceSpan = InferenceSpan(
-                    id = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.path(),
+                    name = eventContext.executionInfo.partName,
                     parentSpan = parentSpan,
                     provider = provider,
                     runId = eventContext.runId,
@@ -361,15 +364,15 @@ public class OpenTelemetry {
 
                 // Start span
                 spanAdapter?.onBeforeSpanStarted(inferenceSpan)
-                spanProcessor.startSpan(inferenceSpan)
+                spanCollector.startSpan(inferenceSpan)
             }
 
             pipeline.interceptLLMCallCompleted(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry after LLM call handler" }
 
                 // Find the current span (Inference Span)
-                val inferenceSpanId = eventContext.executionInfo.id
-                val inferenceSpan = spanProcessor.getSpanCatching<InferenceSpan>(inferenceSpanId)
+                val inferenceSpanId = eventContext.executionInfo.path()
+                val inferenceSpan = spanCollector.getSpanCatching<InferenceSpan>(inferenceSpanId)
                     ?: return@intercept
 
                 val provider = eventContext.model.provider
@@ -431,7 +434,7 @@ public class OpenTelemetry {
 
                 // Stop InferenceSpan
                 spanAdapter?.onBeforeSpanFinished(inferenceSpan)
-                spanProcessor.endSpan(inferenceSpan)
+                spanCollector.endSpan(inferenceSpan)
             }
 
             //endregion LLM Call
@@ -445,11 +448,12 @@ public class OpenTelemetry {
                 val parentId = eventContext.getParentEventIdLogging()
                     ?: return@intercept
 
-                val parentSpan = spanProcessor.getSpanCatching<NodeExecuteSpan>(parentId)
+                val parentSpan = spanCollector.getSpanCatching<NodeExecuteSpan>(parentId)
                     ?: return@intercept
 
                 val executeToolSpan = ExecuteToolSpan(
-                    id = eventContext.executionInfo.id,
+                    id = eventContext.executionInfo.path(),
+                    name = eventContext.executionInfo.partName,
                     parentSpan = parentSpan,
                     toolName = eventContext.toolName,
                     toolArgs = eventContext.toolArgs.toString(),
@@ -458,15 +462,15 @@ public class OpenTelemetry {
                 )
 
                 spanAdapter?.onBeforeSpanStarted(executeToolSpan)
-                spanProcessor.startSpan(executeToolSpan)
+                spanCollector.startSpan(executeToolSpan)
             }
 
             pipeline.interceptToolCallCompleted(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry tool result handler" }
 
                 // Get the current ExecuteToolSpan
-                val executeToolSpanId = eventContext.executionInfo.id
-                val executeToolSpan = spanProcessor.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
+                val executeToolSpanId = eventContext.executionInfo.path()
+                val executeToolSpan = spanCollector.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
                     ?: return@intercept
 
                 eventContext.toolDescription?.let { toolDescription ->
@@ -491,15 +495,15 @@ public class OpenTelemetry {
                 }
 
                 spanAdapter?.onBeforeSpanFinished(span = executeToolSpan)
-                spanProcessor.endSpan(span = executeToolSpan)
+                spanCollector.endSpan(span = executeToolSpan)
             }
 
             pipeline.interceptToolCallFailed(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry tool call failure handler" }
 
-                // Get the current ExecuteToolSpan using executionInfo.id
-                val executeToolSpanId = eventContext.executionInfo.id
-                val executeToolSpan = spanProcessor.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
+                // Get the current ExecuteToolSpan using executionInfo.path()
+                val executeToolSpanId = eventContext.executionInfo.path()
+                val executeToolSpan = spanCollector.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
                     ?: return@intercept
 
                 eventContext.toolDescription?.let { toolDescription ->
@@ -521,11 +525,11 @@ public class OpenTelemetry {
 
                 // End the ExecuteToolSpan span
                 spanAdapter?.onBeforeSpanFinished(executeToolSpan)
-                spanProcessor.endSpan(
+                spanCollector.endSpan(
                     span = executeToolSpan,
                     spanEndStatus = SpanEndStatus(
                         code = StatusCode.ERROR,
-                        description = eventContext.exception?.message
+                        description = eventContext.error?.message
                     )
                 )
             }
@@ -533,9 +537,9 @@ public class OpenTelemetry {
             pipeline.interceptToolValidationFailed(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry tool validation error handler" }
 
-                // Get the current ExecuteToolSpan using executionInfo.id
-                val executeToolSpanId = eventContext.executionInfo.id
-                val executeToolSpan = spanProcessor.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
+                // Get the current ExecuteToolSpan using executionInfo.path()
+                val executeToolSpanId = eventContext.executionInfo.path()
+                val executeToolSpan = spanCollector.getSpanCatching<ExecuteToolSpan>(executeToolSpanId)
                     ?: return@intercept
 
                 eventContext.toolDescription?.let { toolDescription ->
@@ -557,7 +561,7 @@ public class OpenTelemetry {
 
                 // End the ExecuteToolSpan span
                 spanAdapter?.onBeforeSpanFinished(executeToolSpan)
-                spanProcessor.endSpan(
+                spanCollector.endSpan(
                     span = executeToolSpan,
                     spanEndStatus = SpanEndStatus(code = StatusCode.ERROR, description = eventContext.message)
                 )
@@ -579,6 +583,40 @@ public class OpenTelemetry {
             @OptIn(InternalAgentsApi::class)
             return SerializationUtils.encodeDataToStringOrDefault(data, dataType)
         }
+
+        /**
+         * Finds the closest parent span by traversing up the execution hierarchy.
+         * Returns null if no parent span is found.
+         */
+        private fun SpanCollector.findClosestParentSpan(eventContext: AgentLifecycleEventContext): GenAIAgentSpan? {
+            var checkEvent: AgentExecutionInfo? = eventContext.executionInfo.parent
+            var span: GenAIAgentSpan? = null
+
+            while (checkEvent != null) {
+                val checkSpan = this.getSpanCatching<GenAIAgentSpan>(checkEvent.path())
+                if (checkSpan != null) {
+                    span = checkSpan
+                    break
+                }
+
+                checkEvent = checkEvent.parent
+            }
+
+            if (span == null) {
+                logger.error { "Unable to find closest parent span for event with id: ${eventContext.executionInfo.path()}" }
+            }
+
+            return span
+        }
+
+        /**
+         * Gets the parent event ID from the execution info, logging an error if not found.
+         */
+        private fun AgentLifecycleEventContext.getParentEventIdLogging(): String? =
+            this.executionInfo.parent?.path() ?: run {
+                logger.error { "Undefined agent event parent for event with id: ${this.executionInfo.path()}" }
+                null
+            }
 
         //endregion Private Methods
     }

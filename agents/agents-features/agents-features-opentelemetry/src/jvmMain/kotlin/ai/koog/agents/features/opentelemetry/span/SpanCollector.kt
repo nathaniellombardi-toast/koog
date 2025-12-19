@@ -9,12 +9,11 @@ import io.opentelemetry.api.trace.StatusCode
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.context.Context
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
-internal class SpanProcessor(
+internal class SpanCollector(
     private val tracer: Tracer,
     private val verbose: Boolean = false
 ) {
@@ -23,17 +22,23 @@ internal class SpanProcessor(
         private val logger = KotlinLogging.logger { }
     }
 
-    private val _spans = ConcurrentHashMap<String, GenAIAgentSpan>()
+    internal data class SpanNode(
+        val span: GenAIAgentSpan,
+        val children: MutableList<SpanNode> = mutableListOf()
+    )
+
+    private val rootSpans = mutableListOf<SpanNode>()
+    private val spanIndex = mutableMapOf<String, SpanNode>()
 
     private val spansLock = ReentrantReadWriteLock()
 
     val spansCount: Int
-        get() = _spans.count()
+        get() = spanIndex.count()
 
     fun addEventsToSpan(spanId: String, events: List<GenAIAgentEvent>) {
         spansLock.read {
-            val span = _spans[spanId] ?: error("Span with id '$spanId' not found")
-            span.addEvents(events)
+            val spanNode = spanIndex[spanId] ?: error("Span with id '$spanId' not found")
+            spanNode.span.addEvents(events)
         }
     }
 
@@ -43,7 +48,7 @@ internal class SpanProcessor(
     ) {
         logger.debug { "Starting span (name: ${span.name}, id: ${span.id})" }
 
-        if (_spans.containsKey(span.id)) {
+        if (spanIndex.containsKey(span.id)) {
             logger.warn { "Span with id '${span.id}' already started" }
             return
         }
@@ -83,20 +88,32 @@ internal class SpanProcessor(
         spanToFinish.setSpanStatus(spanEndStatus)
         spanToFinish.end()
 
-        val removedSpan = _spans.remove(span.id)
-        if (removedSpan == null) {
-            logger.warn {
-                "Span with id '${span.id}' not found. Make sure you do not delete span with same id several times"
+        spansLock.write {
+            val removedNode = spanIndex.remove(span.id)
+            if (removedNode == null) {
+                logger.warn {
+                    "Span with id '${span.id}' not found. Make sure you do not delete span with same id several times"
+                }
+                return@write
+            }
+
+            // Remove from parent's children or from rootSpans
+            val parentSpan = span.parentSpan
+            if (parentSpan != null) {
+                val parentNode = spanIndex[parentSpan.id]
+                parentNode?.children?.remove(removedNode)
+            } else {
+                rootSpans.remove(removedNode)
             }
         }
     }
 
     inline fun <reified T : GenAIAgentSpan> getSpan(spanId: String): T? {
-        return _spans[spanId] as? T
+        return spanIndex[spanId]?.span as? T
     }
 
     inline fun <reified T : GenAIAgentSpan> getSpanOrThrow(spanId: String): T {
-        val span = _spans[spanId] ?: error("Span with id: $spanId not found")
+        val span = spanIndex[spanId]?.span ?: error("Span with id: $spanId not found")
         return span as? T
             ?: error(
                 "Span with id <$spanId> is not of expected type. Expected: <${T::class.simpleName}>, actual: <${span::class.simpleName}>"
@@ -115,7 +132,8 @@ internal class SpanProcessor(
     }
 
     fun endUnfinishedSpans(filter: (GenAIAgentSpan) -> Boolean = { true }) {
-        _spans.values
+        spanIndex.values
+            .map { it.span }
             .filter { span ->
                 val isRequireFinish = filter(span)
                 isRequireFinish
@@ -134,11 +152,22 @@ internal class SpanProcessor(
     private fun addSpan(span: GenAIAgentSpan) {
         spansLock.write {
             val spanId = span.id
-            val existingSpan = _spans[spanId]
+            val existingNode = spanIndex[spanId]
 
-            check(existingSpan == null) { "Span with id '$spanId' already added" }
+            check(existingNode == null) { "Span with id '$spanId' already added" }
 
-            _spans[span.id] = span
+            val newNode = SpanNode(span)
+            spanIndex[span.id] = newNode
+
+            // Add to parent's children or to rootSpans
+            val parentSpan = span.parentSpan
+            if (parentSpan != null) {
+                val parentNode = spanIndex[parentSpan.id]
+                    ?: error("Parent span with id '${parentSpan.id}' not found. Parent must be added before child.")
+                parentNode.children.add(newNode)
+            } else {
+                rootSpans.add(newNode)
+            }
         }
     }
 

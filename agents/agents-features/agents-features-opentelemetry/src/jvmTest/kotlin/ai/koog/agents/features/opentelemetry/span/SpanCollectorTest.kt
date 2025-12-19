@@ -19,108 +19,108 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class SpanProcessorTest {
+class SpanCollectorTest {
 
     @Test
     fun `spanProcessor should have zero spans initially`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
-        assertEquals(0, spanProcessor.spansCount)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
+        assertEquals(0, spanCollector.spansCount)
     }
 
     @Test
     fun `startSpan should add span to processor`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
 
-        spanProcessor.startSpan(span)
+        spanCollector.startSpan(span)
 
-        assertEquals(1, spanProcessor.spansCount)
+        assertEquals(1, spanCollector.spansCount)
     }
 
     @Test
     fun `getSpan should return span by id when it exists`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
 
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
-        val actualSpan = spanProcessor.getSpan<GenAIAgentSpan>(spanId)
+        val actualSpan = spanCollector.getSpan<GenAIAgentSpan>(spanId)
         assertEquals(spanId, actualSpan?.id)
     }
 
     @Test
     fun `getSpan should return null when no spans are added`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
 
-        val retrievedSpan = spanProcessor.getSpan<GenAIAgentSpan>(spanId)
+        val retrievedSpan = spanCollector.getSpan<GenAIAgentSpan>(spanId)
 
         assertNull(retrievedSpan)
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
     }
 
     @Test
     fun `getSpan should return null when span with given id not found`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
 
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
         val nonExistentSpanId = "non-existent-span"
-        val retrievedSpan = spanProcessor.getSpan<GenAIAgentSpan>(nonExistentSpanId)
+        val retrievedSpan = spanCollector.getSpan<GenAIAgentSpan>(nonExistentSpanId)
 
         assertNull(retrievedSpan)
-        assertEquals(1, spanProcessor.spansCount)
+        assertEquals(1, spanCollector.spansCount)
     }
 
     @Test
     fun `getSpanOrThrow should return span when it exists`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
 
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
-        val retrievedSpan = spanProcessor.getSpanOrThrow<GenAIAgentSpan>(spanId)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
+        val retrievedSpan = spanCollector.getSpanOrThrow<GenAIAgentSpan>(spanId)
 
         assertEquals(spanId, retrievedSpan.id)
-        assertEquals(1, spanProcessor.spansCount)
+        assertEquals(1, spanCollector.spansCount)
     }
 
     @Test
     fun `getSpanOrThrow should throw when span not found`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val nonExistentSpanId = "non-existent-span"
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
 
         val exception = assertFailsWith<IllegalStateException> {
-            spanProcessor.getSpanOrThrow<GenAIAgentSpan>(nonExistentSpanId)
+            spanCollector.getSpanOrThrow<GenAIAgentSpan>(nonExistentSpanId)
         }
         assertEquals("Span with id: $nonExistentSpanId not found", exception.message)
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
     }
 
     @Test
     fun `getSpanOrThrow should throw when span is of wrong type`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
 
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
         // We can't test this with our mock span since we can't create different types,
         // but we can verify the error message format by creating a fake exception
         val throwable = assertThrows<IllegalStateException> {
-            spanProcessor.getSpanOrThrow<InvokeAgentSpan>(spanId)
+            spanCollector.getSpanOrThrow<InvokeAgentSpan>(spanId)
         }
 
         assertEquals(
@@ -128,30 +128,30 @@ class SpanProcessorTest {
             throwable.message
         )
 
-        assertEquals(1, spanProcessor.spansCount)
+        assertEquals(1, spanCollector.spansCount)
     }
 
     @Test
     fun `endSpan should remove span from processor`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
 
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
-        spanProcessor.endSpan(span)
-        assertEquals(0, spanProcessor.spansCount)
+        spanCollector.endSpan(span)
+        assertEquals(0, spanCollector.spansCount)
 
-        val retrievedSpan = spanProcessor.getSpan<GenAIAgentSpan>(spanId)
+        val retrievedSpan = spanCollector.getSpan<GenAIAgentSpan>(spanId)
         assertNull(retrievedSpan)
-        assertEquals(0, spanProcessor.spansCount)
+        assertEquals(0, spanCollector.spansCount)
     }
 
     @Test
     fun `endUnfinishedSpans should end spans that match the filter`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
 
         // Create spans with different IDs
         val span1Id = "span1"
@@ -160,19 +160,19 @@ class SpanProcessorTest {
 
         // Create and start spans
         val span1 = MockGenAIAgentSpan(span1Id)
-        spanProcessor.startSpan(span1)
+        spanCollector.startSpan(span1)
 
         val span2 = MockGenAIAgentSpan(span2Id)
-        spanProcessor.startSpan(span2)
+        spanCollector.startSpan(span2)
 
         val span3 = MockGenAIAgentSpan(span3Id)
-        spanProcessor.startSpan(span3)
+        spanCollector.startSpan(span3)
 
-        assertEquals(3, spanProcessor.spansCount)
+        assertEquals(3, spanCollector.spansCount)
 
         // End one of the spans
-        spanProcessor.endSpan(span2)
-        assertEquals(2, spanProcessor.spansCount)
+        spanCollector.endSpan(span2)
+        assertEquals(2, spanCollector.spansCount)
 
         // Verify initial state
         assertTrue(span1.isStarted)
@@ -183,7 +183,7 @@ class SpanProcessorTest {
         assertFalse(span3.isEnded)
 
         // End spans that match the filter (only span1)
-        spanProcessor.endUnfinishedSpans { span -> span.id == span1Id }
+        spanCollector.endUnfinishedSpans { span -> span.id == span1Id }
 
         // Verify span1 is ended, span2 was already ended, span3 is still not ended
         assertTrue(span1.isStarted)
@@ -194,7 +194,7 @@ class SpanProcessorTest {
         assertFalse(span3.isEnded)
 
         // End all remaining unfinished spans
-        spanProcessor.endUnfinishedSpans()
+        spanCollector.endUnfinishedSpans()
 
         // Verify all spans are ended
         assertTrue(span1.isStarted)
@@ -211,7 +211,7 @@ class SpanProcessorTest {
 
     @Test
     fun `endUnfinishedInvokeAgentSpans should end all spans except agent and agent run spans`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
 
         val agentId = "test-agent"
         val runId = "test-run"
@@ -229,11 +229,11 @@ class SpanProcessorTest {
         val toolSpan = MockGenAIAgentSpan(toolSpanId)
 
         // Add spans to storage
-        spanProcessor.startSpan(agentSpan)
-        spanProcessor.startSpan(agentRunSpan)
-        spanProcessor.startSpan(nodeSpan)
-        spanProcessor.startSpan(toolSpan)
-        assertEquals(4, spanProcessor.spansCount)
+        spanCollector.startSpan(agentSpan)
+        spanCollector.startSpan(agentRunSpan)
+        spanCollector.startSpan(nodeSpan)
+        spanCollector.startSpan(toolSpan)
+        assertEquals(4, spanCollector.spansCount)
 
         // Verify initial state - all spans are started but not ended
         assertTrue(agentSpan.isStarted)
@@ -246,7 +246,7 @@ class SpanProcessorTest {
         assertFalse(toolSpan.isEnded)
 
         // End unfinished agent run spans
-        spanProcessor.endUnfinishedSpans()
+        spanCollector.endUnfinishedSpans()
 
         // Verify that node and tool spans are ended, but agent and agent run spans are not
         assertTrue(agentSpan.isStarted)
@@ -265,13 +265,13 @@ class SpanProcessorTest {
 
     @Test
     fun `addEventsToSpan should add events to the span`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val spanId = "test-span-id"
         val span = MockGenAIAgentSpan(spanId)
 
         // Start the span
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
         // Create test events
         val event1 = MockGenAIAgentEvent(name = "test_event_1").apply {
@@ -284,18 +284,18 @@ class SpanProcessorTest {
         }
 
         // Add events to the span
-        spanProcessor.addEventsToSpan(spanId, listOf(event1, event2))
+        spanCollector.addEventsToSpan(spanId, listOf(event1, event2))
 
         // Verify the span still exists
-        assertEquals(1, spanProcessor.spansCount)
-        val retrievedSpan = spanProcessor.getSpan<GenAIAgentSpan>(spanId)
+        assertEquals(1, spanCollector.spansCount)
+        val retrievedSpan = spanCollector.getSpan<GenAIAgentSpan>(spanId)
         assertNotNull(retrievedSpan)
         assertEquals(spanId, retrievedSpan.id)
     }
 
     @Test
     fun `addEventsToSpan should throw when span not found`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = true)
+        val spanCollector = SpanCollector(MockTracer(), verbose = true)
         val nonExistentSpanId = "non-existent-span"
 
         // Create a test event
@@ -305,7 +305,7 @@ class SpanProcessorTest {
 
         // Try to add event to the non-existent span
         val exception = assertFailsWith<IllegalStateException> {
-            spanProcessor.addEventsToSpan(nonExistentSpanId, listOf(event))
+            spanCollector.addEventsToSpan(nonExistentSpanId, listOf(event))
         }
 
         assertEquals("Span with id '$nonExistentSpanId' not found", exception.message)
@@ -313,14 +313,14 @@ class SpanProcessorTest {
 
     @Test
     fun `test mask HiddenString values in attributes when verbose set to false`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = false)
+        val spanCollector = SpanCollector(MockTracer(), verbose = false)
 
         val span = MockGenAIAgentSpan("test-span")
         val mockSpan = MockSpan()
 
         // Start the span to replace the span instance later with a mocked value
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
         // Replace started span with the mock instance
         span.span = mockSpan
@@ -331,8 +331,8 @@ class SpanProcessorTest {
         )
         span.addAttributes(attributes)
 
-        spanProcessor.endSpan(span)
-        assertEquals(0, spanProcessor.spansCount)
+        spanCollector.endSpan(span)
+        assertEquals(0, spanCollector.spansCount)
 
         // Verify exact converted values when verbose is set to 'false'
         val expectedAttributes = mapOf(
@@ -347,14 +347,14 @@ class SpanProcessorTest {
 
     @Test
     fun `test mask HiddenString values in event attributes and body fields with verbose set to false`() {
-        val spanProcessor = SpanProcessor(MockTracer(), verbose = false)
+        val spanCollector = SpanCollector(MockTracer(), verbose = false)
 
         val span = MockGenAIAgentSpan("test-span")
         val mockSpan = MockSpan()
 
         // Start the span to replace the span instance later with a mocked value
-        spanProcessor.startSpan(span)
-        assertEquals(1, spanProcessor.spansCount)
+        spanCollector.startSpan(span)
+        assertEquals(1, spanCollector.spansCount)
 
         // Event with attribute HiddenString and a body field that contains HiddenString
         // Replace started span with the mock instance
@@ -365,8 +365,8 @@ class SpanProcessorTest {
         }
         span.addEvent(event)
 
-        spanProcessor.endSpan(span)
-        assertEquals(0, spanProcessor.spansCount)
+        spanCollector.endSpan(span)
+        assertEquals(0, spanCollector.spansCount)
 
         // Assert collected event
         assertEquals(1, mockSpan.collectedEvents.size)
