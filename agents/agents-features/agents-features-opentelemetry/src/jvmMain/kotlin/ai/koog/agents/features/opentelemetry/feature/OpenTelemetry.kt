@@ -152,7 +152,7 @@ public class OpenTelemetry {
             pipeline.interceptStrategyStarting(this) intercept@{ eventContext ->
                 logger.debug { "Execute OpenTelemetry before subgraph handler" }
 
-                val parentEventId = eventContext.getParentEventIdLogging()
+                val parentEventId = spanCollector.getParentEventIdLogging()
                     ?: return@intercept
 
                 // Get parent span (Invoke Agent Span)
@@ -310,7 +310,7 @@ public class OpenTelemetry {
                 logger.debug { "Execute OpenTelemetry before LLM call handler" }
 
                 // Get parent span (node or subgraph)
-                val parentId = eventContext.getParentEventIdLogging()
+                val parentId = spanCollector.getParentEventIdLogging()
                     ?: return@intercept
 
                 val parentSpan = spanCollector.getSpanCatching<NodeExecuteSpan>(parentId)
@@ -446,7 +446,7 @@ public class OpenTelemetry {
                 logger.debug { "Execute OpenTelemetry tool call handler" }
 
                 // Get parent span (node or subgraph)
-                val parentId = eventContext.getParentEventIdLogging()
+                val parentId = spanCollector.getParentEventIdLogging()
                     ?: return@intercept
 
                 val parentSpan = spanCollector.getSpanCatching<NodeExecuteSpan>(parentId)
@@ -611,9 +611,15 @@ public class OpenTelemetry {
         }
 
         /**
-         * Gets the parent event ID from the execution info, logging an error if not found.
+         * Gets the parent event ID from the last active span, logging an error if not found.
          */
         private fun SpanCollector.getParentEventIdLogging(): String? {
+            val lastActiveSpan = this.getLastActiveSpan()
+            if (lastActiveSpan == null) {
+                logger.error { "No active spans found to use as parent" }
+                return null
+            }
+            return lastActiveSpan.id
         }
 
         //endregion Private Methods

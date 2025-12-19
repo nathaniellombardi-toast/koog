@@ -39,12 +39,48 @@ internal class SpanCollector(
     private val spanIndex = mutableMapOf<String, SpanNode>()
 
     /**
-     * A read-write lock to ensure thread-safe access to the span index.
+     * A list tracking currently active (open) spans in chronological order.
+     * When a span is started, it's added to the end of the list.
+     * When a span is ended, it's removed from the list.
+     * This allows finding the most recently opened span that's still active.
+     */
+    private val activeSpans = mutableListOf<GenAIAgentSpan>()
+
+    /**
+     * A read-write lock to ensure thread-safe access to the span index and active spans list.
      */
     private val spansLock = ReentrantReadWriteLock()
 
     val spansCount: Int
         get() = spansLock.read { spanIndex.size }
+
+    /**
+     * Returns the most recently opened span that is still active (not yet ended).
+     * This represents the current "active" span in the execution context.
+     *
+     * @return The last active span, or null if no spans are currently active.
+     */
+    fun getLastActiveSpan(): GenAIAgentSpan? {
+        return spansLock.read { activeSpans.lastOrNull() }
+    }
+
+    /**
+     * Returns the most recently opened span of a specific type that is still active.
+     *
+     * @return The last active span of type T, or null if no matching span is active.
+     */
+    inline fun <reified T : GenAIAgentSpan> getLastActiveSpan(): T? {
+        return spansLock.read { activeSpans.lastOrNull { it is T } as? T }
+    }
+
+    /**
+     * Returns all currently active spans in chronological order (oldest first).
+     *
+     * @return A list of all active spans.
+     */
+    fun getActiveSpans(): List<GenAIAgentSpan> {
+        return spansLock.read { activeSpans.toList() }
+    }
 
     fun addEventsToSpan(spanId: String, events: List<GenAIAgentEvent>) {
         spansLock.read {
@@ -83,6 +119,11 @@ internal class SpanCollector(
         span.span = startedSpan
         span.context = startedSpan.storeInContext(parentContext)
 
+        // Add to active spans list
+        spansLock.write {
+            activeSpans.add(span)
+        }
+
         logger.debug { "Span has been started (name: ${span.name}, id: ${span.id})" }
     }
 
@@ -114,6 +155,9 @@ internal class SpanCollector(
                 val parentNode = spanIndex[parentSpan.id]
                 parentNode?.children?.remove(removedNode)
             }
+
+            // Remove from active spans list
+            activeSpans.remove(span)
         }
     }
 
