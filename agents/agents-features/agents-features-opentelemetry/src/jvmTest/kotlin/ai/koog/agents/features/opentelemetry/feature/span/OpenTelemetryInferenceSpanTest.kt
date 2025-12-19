@@ -1,12 +1,9 @@
 package ai.koog.agents.features.opentelemetry.feature.span
 
-import ai.koog.agents.core.annotation.InternalAgentsApi
 import ai.koog.agents.core.dsl.builder.forwardTo
 import ai.koog.agents.core.dsl.builder.strategy
 import ai.koog.agents.core.dsl.extension.nodeLLMRequest
 import ai.koog.agents.core.dsl.extension.onAssistantMessage
-import ai.koog.agents.core.utils.SerializationUtils
-import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.MockToolCallResponse
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.MOCK_LLM_RESPONSE_PARIS
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.SYSTEM_PROMPT
@@ -17,6 +14,7 @@ import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSi
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithSingleToolCallStrategy
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithStrategy
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.testClock
+import ai.koog.agents.features.opentelemetry.assertSpans
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Operation.OperationNameType
 import ai.koog.agents.features.opentelemetry.attribute.SpanAttributes.Response.FinishReasonType
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
@@ -25,10 +23,8 @@ import ai.koog.agents.features.opentelemetry.span.sha256base64
 import ai.koog.agents.testing.tools.getMockExecutor
 import ai.koog.agents.utils.HiddenString
 import ai.koog.prompt.message.Message
-import ai.koog.prompt.message.ResponseMetaInfo
 import ai.koog.prompt.tokenizer.SimpleRegexBasedTokenizer
 import kotlinx.coroutines.test.runTest
-import kotlin.reflect.typeOf
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -311,9 +307,10 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
         val subgraphName = "test-subgraph"
         val subgraphLLMCallNodeName = "test-subgraph-llm-call"
         val subgraphLLMResponse = "LLM Response (subgraph)"
+        val model = defaultModel
 
         val strategy = strategy<String, String>("test-strategy") {
-            val nodeSubgraph by subgraph<String, String>(subgraphName) {
+            val subgraph by subgraph<String, String>(subgraphName) {
                 val nodeSubgraphLLMCall by nodeLLMRequest(subgraphLLMCallNodeName)
 
                 edge(nodeStart forwardTo nodeSubgraphLLMCall)
@@ -322,8 +319,8 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
 
             val nodeLLMCall by nodeLLMRequest(rootNodeCallLLMName)
 
-            edge(nodeStart forwardTo nodeSubgraph)
-            edge(nodeSubgraph forwardTo nodeLLMCall)
+            edge(nodeStart forwardTo subgraph)
+            edge(subgraph forwardTo nodeLLMCall)
             edge(nodeLLMCall forwardTo nodeFinish onAssistantMessage { true })
         }
 
@@ -336,109 +333,70 @@ class OpenTelemetryInferenceSpanTest : OpenTelemetryTestBase() {
 
         val runId = collectedTestData.lastRunId
 
-        val actualSpans = collectedTestData.filterNodeExecutionSpans()
+        val actualSpans = collectedTestData.filterInferenceSpans()
         assertTrue(actualSpans.isNotEmpty(), "Spans should be created during agent execution")
-
-        @OptIn(InternalAgentsApi::class)
-        val serializedRootAssistantResponse = SerializationUtils.encodeDataToStringOrDefault(
-            data = Message.Assistant(
-                content = rootLLMResponse,
-                metaInfo = ResponseMetaInfo(
-                    timestamp = testClock.now()
-                )
-            ),
-            dataType = typeOf<Message>()
-        )
-
-        @OptIn(InternalAgentsApi::class)
-        val serializedSubgraphAssistantResponse = SerializationUtils.encodeDataToStringOrDefault(
-            data = Message.Assistant(
-                content = subgraphLLMResponse,
-                metaInfo = ResponseMetaInfo(
-                    timestamp = testClock.now()
-                )
-            ),
-            dataType = typeOf<Message>()
-        )
 
         val expectedSpans = listOf(
             mapOf(
-                "node.__finish__.${collectedTestData.singleNodeIdByName("__finish__")}" to mapOf(
+                // TODO: Replace sha256base64() with unique event id for the LLM Call event
+                "llm.${subgraphLLMResponse.sha256base64()}" to mapOf(
                     "attributes" to mapOf(
+                        "gen_ai.operation.name" to OperationNameType.CHAT.id,
+                        "gen_ai.system" to model.provider.id,
                         "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to "__finish__",
-                        "koog.node.output" to "\"$rootLLMResponse\"",
-                        "koog.node.input" to "\"$rootLLMResponse\"",
+                        "gen_ai.request.temperature" to TEMPERATURE,
+                        "gen_ai.request.model" to model.id,
+                        "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Stop.id)
                     ),
-                    "events" to emptyMap()
+                    "events" to mapOf(
+                        "gen_ai.system.message" to mapOf(
+                            "gen_ai.system" to model.provider.id,
+                            "role" to Message.Role.System.name.lowercase(),
+                            "content" to SYSTEM_PROMPT,
+                        ),
+                        "gen_ai.user.message" to mapOf(
+                            "gen_ai.system" to model.provider.id,
+                            "role" to Message.Role.User.name.lowercase(),
+                            "content" to subgraphLLMResponse,
+                        ),
+                        "gen_ai.assistant.message" to mapOf(
+                            "gen_ai.system" to model.provider.id,
+                            "role" to Message.Role.Assistant.name.lowercase(),
+                            "content" to rootLLMResponse,
+                        )
+                    )
                 )
             ),
             mapOf(
-                "node.$rootNodeCallLLMName.${collectedTestData.singleNodeIdByName(rootNodeCallLLMName)}" to mapOf(
+                // TODO: Replace sha256base64() with unique event id for the LLM Call event
+                "llm.${userInput.sha256base64()}" to mapOf(
                     "attributes" to mapOf(
+                        "gen_ai.operation.name" to OperationNameType.CHAT.id,
+                        "gen_ai.system" to model.provider.id,
                         "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to rootNodeCallLLMName,
-                        "koog.node.output" to serializedRootAssistantResponse,
-                        "koog.node.input" to "\"$subgraphLLMResponse\"",
+                        "gen_ai.request.temperature" to TEMPERATURE,
+                        "gen_ai.request.model" to model.id,
+                        "gen_ai.response.finish_reasons" to listOf(FinishReasonType.Stop.id)
                     ),
-                    "events" to emptyMap()
+                    "events" to mapOf(
+                        "gen_ai.system.message" to mapOf(
+                            "gen_ai.system" to model.provider.id,
+                            "role" to Message.Role.System.name.lowercase(),
+                            "content" to SYSTEM_PROMPT,
+                        ),
+                        "gen_ai.user.message" to mapOf(
+                            "gen_ai.system" to model.provider.id,
+                            "role" to Message.Role.User.name.lowercase(),
+                            "content" to userInput,
+                        ),
+                        "gen_ai.assistant.message" to mapOf(
+                            "gen_ai.system" to model.provider.id,
+                            "role" to Message.Role.Assistant.name.lowercase(),
+                            "content" to subgraphLLMResponse,
+                        )
+                    )
                 )
             ),
-            mapOf(
-                "node.$subgraphName.${collectedTestData.singleNodeIdByName(subgraphName)}" to mapOf(
-                    "attributes" to mapOf(
-                        "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to subgraphName,
-                        "koog.node.output" to "\"$subgraphLLMResponse\"",
-                        "koog.node.input" to "\"$userInput\"",
-                    ),
-                    "events" to emptyMap()
-                )
-            ),
-            mapOf(
-                "node.__finish__$subgraphName.${collectedTestData.singleNodeIdByName("__finish__$subgraphName")}" to mapOf(
-                    "attributes" to mapOf(
-                        "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to "__finish__$subgraphName",
-                        "koog.node.output" to "\"$subgraphLLMResponse\"",
-                        "koog.node.input" to "\"$subgraphLLMResponse\"",
-                    ),
-                    "events" to emptyMap()
-                )
-            ),
-            mapOf(
-                "node.$subgraphLLMCallNodeName.${collectedTestData.singleNodeIdByName(subgraphLLMCallNodeName)}" to mapOf(
-                    "attributes" to mapOf(
-                        "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to subgraphLLMCallNodeName,
-                        "koog.node.output" to serializedSubgraphAssistantResponse,
-                        "koog.node.input" to "\"$userInput\"",
-                    ),
-                    "events" to emptyMap()
-                )
-            ),
-            mapOf(
-                "node.__start__$subgraphName.${collectedTestData.singleNodeIdByName("__start__$subgraphName")}" to mapOf(
-                    "attributes" to mapOf(
-                        "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to "__start__$subgraphName",
-                        "koog.node.input" to "\"$userInput\"",
-                        "koog.node.output" to "\"$userInput\"",
-                    ),
-                    "events" to emptyMap()
-                )
-            ),
-            mapOf(
-                "node.__start__.${collectedTestData.singleNodeIdByName("__start__")}" to mapOf(
-                    "attributes" to mapOf(
-                        "gen_ai.conversation.id" to runId,
-                        "koog.node.name" to "__start__",
-                        "koog.node.input" to "\"$userInput\"",
-                        "koog.node.output" to "\"$userInput\"",
-                    ),
-                    "events" to emptyMap()
-                )
-            )
         )
 
         assertSpans(expectedSpans, actualSpans)

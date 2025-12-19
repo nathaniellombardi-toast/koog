@@ -1,9 +1,9 @@
 package ai.koog.agents.features.opentelemetry.feature.span
 
 import ai.koog.agents.core.dsl.builder.strategy
-import ai.koog.agents.features.opentelemetry.OpenTelemetrySpanAsserts.assertSpans
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.Parameter.USER_PROMPT_PARIS
 import ai.koog.agents.features.opentelemetry.OpenTelemetryTestAPI.runAgentWithStrategy
+import ai.koog.agents.features.opentelemetry.assertSpans
 import ai.koog.agents.features.opentelemetry.feature.OpenTelemetryTestBase
 import ai.koog.agents.utils.HiddenString
 import kotlinx.coroutines.test.runTest
@@ -21,13 +21,11 @@ class OpenTelemetrySubgraphTest : OpenTelemetryTestBase() {
         val subgraphNodeOutput = "$userInput (subgraph)"
 
         val strategy = strategy<String, String>("test-strategy") {
-            val nodeSubgraph by subgraph<String, String>(subgraphName) {
+            val subgraph by subgraph<String, String>(subgraphName) {
                 val nodeSubgraphBlank by node<String, String>(subgraphNodeName) { subgraphNodeOutput }
-
                 nodeStart then nodeSubgraphBlank then nodeFinish
             }
-
-            nodeStart then nodeSubgraph then nodeFinish
+            nodeStart then subgraph then nodeFinish
         }
 
         val collectedTestData = runAgentWithStrategy(strategy = strategy, userPrompt = userInput)
@@ -119,13 +117,11 @@ class OpenTelemetrySubgraphTest : OpenTelemetryTestBase() {
         val subgraphNodeOutput = "$userInput (subgraph)"
 
         val strategy = strategy<String, String>("test-strategy") {
-            val nodeSubgraph by subgraph<String, String>(subgraphName) {
+            val subgraph by subgraph<String, String>(subgraphName) {
                 val nodeSubgraphBlank by node<String, String>(subgraphNodeName) { subgraphNodeOutput }
-
                 nodeStart then nodeSubgraphBlank then nodeFinish
             }
-
-            nodeStart then nodeSubgraph then nodeFinish
+            nodeStart then subgraph then nodeFinish
         }
 
         val collectedTestData = runAgentWithStrategy(
@@ -224,15 +220,13 @@ class OpenTelemetrySubgraphTest : OpenTelemetryTestBase() {
         val subgraphNodeOutput = "$userInput (subgraph)"
 
         val strategy = strategy<String, String>("test-strategy") {
-            val nodeSubgraph by subgraph<String, String>(subgraphName) {
+            val subgraph by subgraph<String, String>(subgraphName) {
                 val nodeSubgraphBlank by node<String, String>(subgraphNodeName) { subgraphNodeOutput }
-
                 nodeStart then nodeSubgraphBlank then nodeFinish
             }
 
             val nodeBlank by node<String, String>(rootNodeName) { rootNodeOutput }
-
-            nodeStart then nodeSubgraph then nodeBlank then nodeFinish
+            nodeStart then subgraph then nodeBlank then nodeFinish
         }
 
         val collectedTestData = runAgentWithStrategy(strategy = strategy, userPrompt = userInput)

@@ -5,7 +5,6 @@ import ai.koog.agents.core.agent.AIAgentService
 import ai.koog.agents.core.agent.GraphAIAgent
 import ai.koog.agents.core.agent.GraphAIAgentService
 import ai.koog.agents.core.agent.config.AIAgentConfig
-import ai.koog.agents.core.agent.context.element.getNodeInfoElement
 import ai.koog.agents.core.agent.entity.AIAgentGraphStrategy
 import ai.koog.agents.core.dsl.builder.forwardTo
 import ai.koog.agents.core.dsl.builder.strategy
@@ -262,15 +261,11 @@ internal object OpenTelemetryTestAPI {
         val nodesInfo = mutableListOf<NodeInfo>()
         install(EventHandler.Feature) {
             onNodeExecutionStarting { eventContext ->
-                getNodeInfoElement()?.id?.let { nodeId ->
-                    nodesInfo.add(NodeInfo(nodeName = eventContext.node.name, nodeId = nodeId))
-                }
+                nodesInfo.add(NodeInfo(nodeName = eventContext.node.name, nodeId = eventContext.node.id))
             }
 
             onSubgraphExecutionStarting { eventContext ->
-                getNodeInfoElement()?.id?.let { nodeId ->
-                    nodesInfo.add(NodeInfo(nodeName = eventContext.subgraph.name, nodeId = nodeId))
-                }
+                nodesInfo.add(NodeInfo(nodeName = eventContext.subgraph.name, nodeId = eventContext.subgraph.id))
             }
         }
         return nodesInfo

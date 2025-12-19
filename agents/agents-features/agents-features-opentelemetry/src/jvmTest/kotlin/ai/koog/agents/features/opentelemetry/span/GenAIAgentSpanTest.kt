@@ -19,17 +19,17 @@ class GenAIAgentSpanTest {
 
     @Test
     fun `constructor should initialize with parent`() {
-        val parentSpan = MockGenAIAgentSpan("parent.span")
-        val childSpan = MockGenAIAgentSpan("parent.span.child", parent = parentSpan)
+        val parentSpan = MockGenAIAgentSpan(spanId = "parent.span")
+        val childSpan = MockGenAIAgentSpan(spanId = "parent.span.child", parentSpan = parentSpan)
 
-        assertEquals(parentSpan, childSpan.parent)
+        assertEquals(parentSpan, childSpan.parentSpan)
     }
 
     @Test
     fun `constructor should initialize without parent`() {
         val span = MockGenAIAgentSpan("span")
 
-        assertNull(span.parent)
+        assertNull(span.parentSpan)
     }
 
     //endregion Constructor
@@ -47,7 +47,7 @@ class GenAIAgentSpanTest {
     @Test
     fun `name should return correct name with parent`() {
         val parentSpan = MockGenAIAgentSpan("parent.span")
-        val childSpan = MockGenAIAgentSpan("parent.span.child", parent = parentSpan)
+        val childSpan = MockGenAIAgentSpan("parent.span.child", parentSpan = parentSpan)
 
         assertEquals("parent.span.child", childSpan.spanId)
         assertEquals("child", childSpan.name)

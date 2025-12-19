@@ -49,7 +49,7 @@ internal class SpanProcessor(
         }
 
         val spanKind = span.kind
-        val parentContext = span.parent?.context ?: Context.current()
+        val parentContext = span.parentSpan?.context ?: Context.current()
 
         val spanBuilder = tracer.spanBuilder(span.name)
             .setStartTimestamp(instant ?: Instant.now())
@@ -127,13 +127,6 @@ internal class SpanProcessor(
                     spanEndStatus = SpanEndStatus(StatusCode.UNSET)
                 )
             }
-    }
-
-    fun endUnfinishedInvokeAgentSpans(agentId: String, runId: String) {
-        val agentRunSpanId = InvokeAgentSpan.createId(agentId, runId)
-        val agentSpanId = CreateAgentSpan.createId(agentId)
-
-        endUnfinishedSpans(filter = { span -> span.spanId != agentSpanId && span.spanId != agentRunSpanId })
     }
 
     //region Private Methods

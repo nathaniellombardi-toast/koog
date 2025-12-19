@@ -11,12 +11,8 @@ import io.opentelemetry.context.Context
  * Represents an abstract base class for a GenAI agent span in a trace.
  * A span represents a logical unit of work or operation within a trace and is
  * responsible for managing associated metadata, such as context, attributes, and events.
- *
- * @property parent The parent span. Null if this span is a root span.
  */
-internal abstract class GenAIAgentSpan(
-    val parent: GenAIAgentSpan?,
-) {
+internal abstract class GenAIAgentSpan {
 
     companion object {
         private val logger = KotlinLogging.logger { }
@@ -53,7 +49,7 @@ internal abstract class GenAIAgentSpan(
      * and simplified identifier for the current trace span.
      */
     val name: String
-        get() = spanId.removePrefix(parent?.spanId ?: "").trimStart('.')
+        get() = spanId.removePrefix(parentSpan?.spanId ?: "").trimStart('.')
 
     /**
      * Represents the kind of span that is being created or used.
@@ -67,6 +63,12 @@ internal abstract class GenAIAgentSpan(
      * The unique identifier for the span, providing a means to track and distinguish spans.
      */
     abstract val spanId: String
+
+    /**
+     * The parent span of the current span.
+     */
+    abstract val parentSpan: GenAIAgentSpan?
+
 
     private val _attributes = mutableListOf<Attribute>()
 

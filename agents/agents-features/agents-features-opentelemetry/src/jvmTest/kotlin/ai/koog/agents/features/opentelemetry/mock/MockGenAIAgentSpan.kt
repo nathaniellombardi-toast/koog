@@ -5,8 +5,8 @@ import io.opentelemetry.api.trace.StatusCode
 
 internal class MockGenAIAgentSpan(
     override val spanId: String,
-    parent: GenAIAgentSpan? = null
-) : GenAIAgentSpan(parent) {
+    override val parentSpan: GenAIAgentSpan? = null
+) : GenAIAgentSpan() {
 
     val isStarted: Boolean
         get() = (span as MockSpan).isStarted
