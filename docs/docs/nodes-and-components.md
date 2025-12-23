@@ -1,19 +1,57 @@
-_# Predefined nodes and components
+# Predefined nodes and components
 
 Nodes are the fundamental building blocks of agent workflows in the Koog framework.
 Each node represents a specific operation or transformation in the workflow, and they can be connected using edges to define the flow of execution.
 
-In general, they let you encapsulate complex logic into reusable components that can be easily integrated into
+In general, nodes let you encapsulate complex logic into reusable components that can be easily integrated into
 different agent workflows. This guide will walk you through the existing nodes that can be used in your agent
 strategies.
 
-For more detailed reference documentation, see [API reference](https://api.koog.ai/index.html).
+Each node is essentially a function that takes an input of a specific type and returns an output of a specific type.
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["node"]
+        execute(Do stuff)
+    end
+    
+    in --Input--> execute --Output--> out
+
+    classDef hidden display: none;
+```
+
+Here is how you can define a node that expects a string as input and returns the length of the string (an integer) as output:
+
+```kotlin
+val nodeLength by node<String, Int> { input ->
+    input.length
+}
+```
+
+For more information, see [`node()`](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.builder/-a-i-agent-subgraph-builder-base/node.html).
 
 ## Utility nodes
 
 ### nodeDoNothing
 
 A simple pass-through node that does nothing and returns the input as output. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-do-nothing.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeDoNothing"]
+        execute(Do nothing)
+    end
+    
+    in ---|T| execute --T--> out
+
+    classDef hidden display: none;
+```
 
 You can use this node for the following purposes:
 
@@ -46,6 +84,20 @@ edge(passthrough forwardTo nodeFinish)
 
 A node that adds messages to the LLM prompt using the provided prompt builder.
 This is useful for modifying the conversation context before making an actual LLM request. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-update-prompt.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeAppendPrompt"]
+        execute(Append prompt)
+    end
+    
+    in ---|T| execute --T--> out
+
+    classDef hidden display: none;
+```
 
 You can use this node for the following purposes:
 
@@ -92,14 +144,56 @@ edge(setupContext forwardTo secondNode)
 
 A node that appends a user message to the LLM prompt and gets a response where the LLM can only call tools. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-send-message-only-calling-tools.html).
 
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMSendMessageOnlyCallingTools"]
+        execute(Request LLM expecting only tool calls)
+    end
+    
+    in --String--> execute --Message.Response--> out
+
+    classDef hidden display: none;
+```
+
 ### nodeLLMSendMessageForceOneTool
 
 A node that that appends a user message to the LLM prompt and forces the LLM to use a specific tool. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-send-message-force-one-tool.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMSendMessageForceOneTool"]
+        execute(Request LLM expecting a specific tool call)
+    end
+    
+    in --String--> execute --Message.Response--> out
+
+    classDef hidden display: none;
+```
 
 ### nodeLLMRequest
 
 A node that appends a user message to the LLM prompt and gets a response with optional tool usage. The node configuration determines whether
 tool calls are allowed during the processing of the message. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-request.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMRequest"]
+        execute(Request LLM)
+    end
+    
+    in --String--> execute --Message.Response--> out
+
+    classDef hidden display: none;
+```
 
 You can use this node for the following purposes:
 
@@ -129,13 +223,55 @@ edge(getUserQuestion forwardTo requestLLM)
 
 A node that appends a user message to the LLM prompt and requests structured data from the LLM with error correction capabilities. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-request-structured.html).
 
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMRequestStructured"]
+        execute(Request LLM structured)
+    end
+    
+    in --String--> execute -- "Result&lt;StructuredResponse&gt;" --> out
+
+    classDef hidden display: none;
+```
+
 ### nodeLLMRequestStreaming
 
 A node that appends a user message to the LLM prompt and streams LLM response with or without stream data transformation. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-request-streaming.html).
 
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMRequestStreaming"]
+        execute(Request LLM streaming)
+    end
+    
+    in --String--> execute --Flow--> out
+
+    classDef hidden display: none;
+```
+
 ### nodeLLMRequestMultiple
 
 A node that appends a user message to the LLM prompt and gets multiple LLM responses with tool calls enabled. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-request-multiple.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMRequestMultiple"]
+        execute(Request LLM expecting multiple responses)
+    end
+    
+    in --String--> execute -- "List&lt;Message.Response&gt;" --> out
+
+    classDef hidden display: none;
+```
 
 You can use this node for the following purposes:
 
@@ -167,6 +303,20 @@ edge(getComplexUserQuestion forwardTo requestLLMMultipleTools)
 
 A node that compresses the current LLM prompt (message history) into a summary, replacing messages with a concise summary (TL;DR). For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-compress-history.html).
 This is useful for managing long conversations by compressing the history to reduce token usage.
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMCompressHistory"]
+        execute(Compress current prompt)
+    end
+    
+    in ---|T| execute --T--> out
+
+    classDef hidden display: none;
+```
 
 To learn more about history compression, see [History compression](history-compression.md).
 
@@ -207,6 +357,20 @@ edge(generateHugeHistory forwardTo compressHistory)
 
 A node that executes a single tool call and returns its result. This node is used to handle tool calls made by the LLM. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-execute-tool.html).
 
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeExecuteTool"]
+        execute(Execute tool call)
+    end
+    
+    in --Message.Tool.Call--> execute --ReceivedToolResult--> out
+
+    classDef hidden display: none;
+```
+
 You can use this node for the following purposes:
 
 - Execute tools requested by the LLM.
@@ -238,6 +402,20 @@ edge(requestLLM forwardTo executeTool onToolCall { true })
 
 A node that adds a tool result to the prompt and requests an LLM response. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-send-tool-result.html).
 
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMSendToolResult"]
+        execute(Request LLM)
+    end
+    
+    in --ReceivedToolResult--> execute --Message.Response--> out
+
+    classDef hidden display: none;
+```
+
 You can use this node for the following purposes:
 
 - Process the results of tool executions.
@@ -267,6 +445,20 @@ edge(executeTool forwardTo sendToolResultToLLM)
 ### nodeExecuteMultipleTools
 
 A node that executes multiple tool calls. These calls can optionally be executed in parallel. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-execute-multiple-tools.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeExecuteMultipleTools"]
+        execute(Execute multiple tool calls)
+    end
+    
+    in -- "List&lt;Message.Tool.Call&gt;" --> execute -- "List&lt;ReceivedToolResult&gt;" --> out
+
+    classDef hidden display: none;
+```
 
 You can use this node for the following purposes:
 
@@ -298,6 +490,20 @@ edge(requestLLMMultipleTools forwardTo executeMultipleTools onMultipleToolCalls 
 ### nodeLLMSendMultipleToolResults
 
 A node that adds multiple tool results to the prompt and gets multiple LLM responses. For details, see [API reference](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.extension/node-l-l-m-send-multiple-tool-results.html).
+
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph node ["nodeLLMSendMultipleToolResults"]
+        execute(Request LLM expecting multiple responses)
+    end
+    
+    in -- "List&lt;ReceivedToolResult&gt;" --> execute -- "List&lt;Message.Response&gt;" --> out
+
+    classDef hidden display: none;
+```
 
 You can use this node for the following purposes:
 
@@ -331,9 +537,26 @@ The framework provides the `transform` extension function that allows you to cre
 that apply transformations to their output. This is useful when you need to convert the output of a node 
 to a different type or format while preserving the original node's functionality.
 
+```mermaid
+graph LR
+    in:::hidden
+    out:::hidden
+    
+    subgraph nodeWithTransform [transformed node]
+        subgraph node ["node"]
+            execute(Do stuff)
+        end
+        transform
+    end
+    
+    in --Input--> execute --> transform --Output--> out
+
+    classDef hidden display: none;
+```
+
 ### transform
 
-The `transform` function creates a new `AIAgentNodeDelegate` that wraps the original node and applies a transformation function to its output.
+The [`transform()`](https://api.koog.ai/agents/agents-core/ai.koog.agents.core.dsl.builder/-a-i-agent-node-delegate/transform.html) function creates a new `AIAgentNodeDelegate` that wraps the original node and applies a transformation function to its output.
 
 <!--- INCLUDE
 /**
